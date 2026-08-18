@@ -2,6 +2,7 @@
 """
 app.py -- Flask Web Dashboard Backend for repo-quality-evaluation-measure-ext
 Provides REST APIs and UI serving for repository quality audits.
+Includes disk-persisted state to support multi-worker environments (Render/Gunicorn).
 """
 
 import os
@@ -28,10 +29,82 @@ CLONES_DIR.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
-# In-memory job store
-# Schema: {job_id: {id, created_at, status, target, target_type, options, logs: [], results: {}, error: None}}
 JOBS = {}
 JOBS_LOCK = threading.Lock()
+
+
+def save_job_meta(job_id, job_entry):
+    job_dir = SCRATCH_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    meta_path = job_dir / "job_meta.json"
+    try:
+        # Don't persist huge logs inside meta file; logs live in audit.log
+        meta_copy = dict(job_entry)
+        meta_copy["logs"] = []  # stored separately in audit.log
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta_copy, f, indent=2)
+    except Exception as e:
+        print(f"Error saving job meta: {e}")
+
+
+def load_job(job_id):
+    """Load job state from in-memory cache or disk (for multi-worker sync)."""
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+
+    job_dir = SCRATCH_DIR / job_id
+    meta_path = job_dir / "job_meta.json"
+    log_path = job_dir / "audit.log"
+
+    if not job and meta_path.exists():
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                job = json.load(f)
+        except Exception:
+            pass
+
+    if not job:
+        return None
+
+    # Always ensure live logs from audit.log are included
+    logs = []
+    if log_path.exists():
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                logs = [line.rstrip() for line in f.readlines() if line.strip()]
+        except Exception:
+            pass
+    job["logs"] = logs
+
+    # Ensure results are populated if files exist
+    results = job.get("results") or {}
+    measurement_file = job_dir / "measurement.json"
+    codebase_file = job_dir / "codebase_repos.json"
+    mining_file = job_dir / "codebase_repo_mining.json"
+
+    if "measurement" not in results and measurement_file.exists():
+        try:
+            with open(measurement_file, "r", encoding="utf-8") as f:
+                results["measurement"] = json.load(f)
+        except Exception:
+            pass
+
+    if "codebase_repos" not in results and codebase_file.exists():
+        try:
+            with open(codebase_file, "r", encoding="utf-8") as f:
+                results["codebase_repos"] = json.load(f)
+        except Exception:
+            pass
+
+    if "mining" not in results and mining_file.exists():
+        try:
+            with open(mining_file, "r", encoding="utf-8") as f:
+                results["mining"] = json.load(f)
+        except Exception:
+            pass
+
+    job["results"] = results
+    return job
 
 
 def run_measurement_thread(job_id, target_path, is_temp_clone, options):
@@ -50,7 +123,9 @@ def run_measurement_thread(job_id, target_path, is_temp_clone, options):
 
     try:
         with JOBS_LOCK:
-            JOBS[job_id]["status"] = "measuring"
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "measuring"
+                save_job_meta(job_id, JOBS[job_id])
 
         log(f"Starting measurement on target: {target_path}")
         log(f"Options: {options}")
@@ -136,21 +211,24 @@ def run_measurement_thread(job_id, target_path, is_temp_clone, options):
                 log(f"Warning: Failed to parse codebase_repo_mining.json: {e}")
 
         with JOBS_LOCK:
-            JOBS[job_id]["results"] = results
-            JOBS[job_id]["status"] = "completed" if (measurement_file.exists() or return_code == 0) else "failed"
-            if JOBS[job_id]["status"] == "completed":
-                log("Measurement completed successfully.")
-            else:
-                JOBS[job_id]["error"] = f"Process exited with return code {return_code}"
+            if job_id in JOBS:
+                JOBS[job_id]["results"] = results
+                JOBS[job_id]["status"] = "completed" if (measurement_file.exists() or return_code == 0) else "failed"
+                if JOBS[job_id]["status"] == "completed":
+                    log("Measurement completed successfully.")
+                else:
+                    JOBS[job_id]["error"] = f"Process exited with return code {return_code}"
+                save_job_meta(job_id, JOBS[job_id])
 
     except Exception as e:
         log(f"Fatal execution error: {e}")
         with JOBS_LOCK:
-            JOBS[job_id]["status"] = "failed"
-            JOBS[job_id]["error"] = str(e)
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "failed"
+                JOBS[job_id]["error"] = str(e)
+                save_job_meta(job_id, JOBS[job_id])
 
     finally:
-        # If it was a disposable clone, optionally clean up or keep per privacy guidelines
         if is_temp_clone and target_path.exists():
             try:
                 log("Cleaning up temporary clone directory...")
@@ -162,6 +240,8 @@ def run_measurement_thread(job_id, target_path, is_temp_clone, options):
 def clone_and_run(job_id, git_url, options):
     job_clone_dir = CLONES_DIR / job_id
     job_clone_dir.mkdir(parents=True, exist_ok=True)
+    log_file = (SCRATCH_DIR / job_id) / "audit.log"
+    (SCRATCH_DIR / job_id).mkdir(parents=True, exist_ok=True)
 
     def log(msg):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -169,10 +249,14 @@ def clone_and_run(job_id, git_url, options):
         with JOBS_LOCK:
             if job_id in JOBS:
                 JOBS[job_id]["logs"].append(formatted)
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(formatted + "\n")
 
     try:
         with JOBS_LOCK:
-            JOBS[job_id]["status"] = "cloning"
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "cloning"
+                save_job_meta(job_id, JOBS[job_id])
 
         log(f"Cloning remote repository: {git_url} ...")
         clone_cmd = ["git", "clone", "--depth", "100", git_url, str(job_clone_dir)]
@@ -189,8 +273,10 @@ def clone_and_run(job_id, git_url, options):
             err_msg = clone_proc.stderr.strip() or "Git clone failed"
             log(f"Git clone error: {err_msg}")
             with JOBS_LOCK:
-                JOBS[job_id]["status"] = "failed"
-                JOBS[job_id]["error"] = err_msg
+                if job_id in JOBS:
+                    JOBS[job_id]["status"] = "failed"
+                    JOBS[job_id]["error"] = err_msg
+                    save_job_meta(job_id, JOBS[job_id])
             return
 
         log("Git clone successful. Proceeding to measurement...")
@@ -199,8 +285,10 @@ def clone_and_run(job_id, git_url, options):
     except Exception as e:
         log(f"Clone error: {e}")
         with JOBS_LOCK:
-            JOBS[job_id]["status"] = "failed"
-            JOBS[job_id]["error"] = str(e)
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "failed"
+                JOBS[job_id]["error"] = str(e)
+                save_job_meta(job_id, JOBS[job_id])
 
 
 # ---------------- Routes ----------------
@@ -213,7 +301,7 @@ def index():
 @app.route("/api/audit", methods=["POST"])
 def start_audit():
     data = request.get_json() or {}
-    target_type = data.get("target_type", "local")  # 'local' or 'remote'
+    target_type = data.get("target_type", "local")
     target_val = (data.get("target") or "").strip()
 
     if not target_val:
@@ -243,18 +331,24 @@ def start_audit():
 
     with JOBS_LOCK:
         JOBS[job_id] = job_entry
+    save_job_meta(job_id, job_entry)
+
+    # Also start the audit log file
+    job_dir = SCRATCH_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    with open(job_dir / "audit.log", "w", encoding="utf-8") as f:
+        f.write(job_entry["logs"][0] + "\n")
 
     if target_type == "remote":
-        # Remote Git URL
         t = threading.Thread(target=clone_and_run, args=(job_id, target_val, options), daemon=True)
         t.start()
     else:
-        # Local path
         local_path = Path(target_val).resolve()
         if not local_path.exists() or not local_path.is_dir():
             with JOBS_LOCK:
                 JOBS[job_id]["status"] = "failed"
                 JOBS[job_id]["error"] = f"Local directory '{target_val}' does not exist."
+                save_job_meta(job_id, JOBS[job_id])
             return jsonify({"job_id": job_id, "status": "failed", "error": f"Path '{target_val}' not found."}), 400
 
         t = threading.Thread(target=run_measurement_thread, args=(job_id, local_path, False, options), daemon=True)
@@ -265,27 +359,35 @@ def start_audit():
 
 @app.route("/api/jobs/<job_id>", methods=["GET"])
 def get_job(job_id):
-    with JOBS_LOCK:
-        job = JOBS.get(job_id)
-        if not job:
-            return jsonify({"error": "Job not found"}), 404
-        return jsonify(job)
+    job = load_job(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    return jsonify(job)
 
 
 @app.route("/api/history", methods=["GET"])
 def get_history():
-    with JOBS_LOCK:
-        history = [
-            {
-                "id": j["id"],
-                "created_at": j["created_at"],
-                "status": j["status"],
-                "target": j["target"],
-                "target_type": j["target_type"]
-            }
-            for j in sorted(JOBS.values(), key=lambda x: x["created_at"], reverse=True)
-        ]
-        return jsonify(history)
+    history = []
+    # Scan scratch directory for all jobs
+    if SCRATCH_DIR.exists():
+        for job_folder in SCRATCH_DIR.iterdir():
+            if job_folder.is_dir():
+                meta_file = job_folder / "job_meta.json"
+                if meta_file.exists():
+                    try:
+                        with open(meta_file, "r", encoding="utf-8") as f:
+                            meta = json.load(f)
+                            history.append({
+                                "id": meta.get("id", job_folder.name),
+                                "created_at": meta.get("created_at", ""),
+                                "status": meta.get("status", "unknown"),
+                                "target": meta.get("target", ""),
+                                "target_type": meta.get("target_type", "")
+                            })
+                    except Exception:
+                        pass
+    history.sort(key=lambda x: x["created_at"], reverse=True)
+    return jsonify(history)
 
 
 @app.route("/api/download/<job_id>/<file_type>", methods=["GET"])
