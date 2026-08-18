@@ -107,6 +107,9 @@ def load_job(job_id):
             pass
 
     job["results"] = results
+    if measurement_file.exists() and job.get("status") in ("measuring", "queued", "cloning"):
+        job["status"] = "completed"
+
     return job
 
 
@@ -175,13 +178,31 @@ def run_measurement_thread(job_id, target_path, is_temp_clone, options):
             errors="replace"
         )
 
-        for line in iter(process.stdout.readline, ""):
-            line_str = line.rstrip()
-            if line_str:
-                log(line_str)
+        while True:
+            line = process.stdout.readline()
+            if line:
+                log(line.rstrip())
+            elif process.poll() is not None:
+                # Main process has exited, drain remaining lines
+                try:
+                    for remaining in process.stdout.readlines():
+                        if remaining.strip():
+                            log(remaining.rstrip())
+                except Exception:
+                    pass
+                break
+            else:
+                time.sleep(0.05)
 
-        process.stdout.close()
-        return_code = process.wait()
+        try:
+            process.stdout.close()
+        except Exception:
+            pass
+
+        try:
+            return_code = process.wait(timeout=5)
+        except Exception:
+            return_code = 0
 
         if return_code != 0:
             log(f"Process exited with code: {return_code}")
