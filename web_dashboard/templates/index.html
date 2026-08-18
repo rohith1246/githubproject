@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Repo Quality & Runnability Audit Dashboard</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#eef2ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 900: '#1e1b4b' },
+            darkbg: '#0f172a',
+            darkcard: '#1e293b',
+            darkborder: '#334155'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .terminal-font { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body class="bg-darkbg text-slate-100 min-h-screen flex flex-col font-sans selection:bg-brand-500 selection:text-white">
+
+  <!-- Navigation Bar -->
+  <header class="border-b border-darkborder bg-darkcard/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-400 flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
+          <i class="fa-solid fa-microchip text-lg"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+            Repo Quality & Runnability Audit
+          </h1>
+          <p class="text-xs text-slate-400">External Privacy-Preserving Measurement Engine</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-4">
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
+          Privacy Allowlist Active
+        </span>
+        <button id="btnHistoryToggle" onclick="toggleHistoryModal()" class="text-slate-300 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition">
+          <i class="fa-solid fa-clock-rotate-left"></i> History
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- Audit Input Control Card -->
+    <section class="bg-darkcard border border-darkborder rounded-2xl p-6 shadow-xl relative overflow-hidden">
+      <div class="absolute top-0 right-0 w-96 h-96 bg-brand-600/5 rounded-full blur-3xl -z-10 pointer-events-none"></div>
+      
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-darkborder/60">
+        <div>
+          <h2 class="text-xl font-semibold text-white">Start New Repository Measurement</h2>
+          <p class="text-sm text-slate-400 mt-1">Audit AST complexity, buildability, test runner discoverability, and benchmark capacity.</p>
+        </div>
+        <!-- Target Type Tabs -->
+        <div class="flex bg-slate-900/90 p-1 rounded-xl border border-darkborder self-start">
+          <button id="tabLocal" onclick="setTargetType('local')" class="px-4 py-1.5 rounded-lg text-sm font-medium transition bg-brand-600 text-white shadow">
+            <i class="fa-solid fa-folder-open mr-1.5"></i> Local Directory
+          </button>
+          <button id="tabRemote" onclick="setTargetType('remote')" class="px-4 py-1.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-white">
+            <i class="fa-brands fa-github mr-1.5"></i> Git URL
+          </button>
+        </div>
+      </div>
+
+      <form id="auditForm" onsubmit="handleStartAudit(event)" class="space-y-6">
+        <!-- Target Input -->
+        <div>
+          <label id="lblTarget" class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+            Local Repository Absolute Path
+          </label>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+              <i id="targetIcon" class="fa-solid fa-folder"></i>
+            </div>
+            <input 
+              type="text" 
+              id="inputTarget" 
+              required 
+              placeholder="e.g. C:\Users\username\projects\my-app" 
+              class="w-full bg-slate-900/90 border border-darkborder focus:border-brand-500 focus:ring-1 focus:ring-brand-500 rounded-xl pl-10 pr-24 py-3 text-sm text-white placeholder-slate-500 transition"
+            />
+            <button 
+              type="button" 
+              onclick="fillCurrentDir()" 
+              id="btnQuickCurrent" 
+              class="absolute right-2.5 top-2.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+              Use Current
+            </button>
+          </div>
+        </div>
+
+        <!-- Advanced Options Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+          <!-- Build Probe Mode -->
+          <div class="bg-slate-900/60 border border-darkborder/80 rounded-xl p-3.5">
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+              <span><i class="fa-solid fa-hammer mr-1.5 text-amber-400"></i> Build Probe Mode</span>
+            </label>
+            <select id="selectBuildMode" class="w-full bg-slate-800 border border-darkborder rounded-lg px-2.5 py-1.5 text-sm text-white focus:ring-brand-500">
+              <option value="discover" selected>discover (Safe test discovery)</option>
+              <option value="full">full (Execute test suite)</option>
+              <option value="none">none (Static AST only)</option>
+            </select>
+            <p class="text-[11px] text-slate-500 mt-1">Queries runner for test collection</p>
+          </div>
+
+          <!-- LLM Lane -->
+          <div class="bg-slate-900/60 border border-darkborder/80 rounded-xl p-3.5">
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+              <span><i class="fa-solid fa-brain mr-1.5 text-indigo-400"></i> LLM Assistant Lane</span>
+            </label>
+            <select id="selectLLMMode" onchange="handleLLMChange()" class="w-full bg-slate-800 border border-darkborder rounded-lg px-2.5 py-1.5 text-sm text-white focus:ring-brand-500">
+              <option value="no_llm" selected>Disabled (--no-llm, Zero cost)</option>
+              <option value="claude">Claude (Logic Depth & Mining)</option>
+              <option value="gemini">Gemini</option>
+              <option value="codex">Codex</option>
+            </select>
+            <p class="text-[11px] text-slate-500 mt-1">Computes logic depth & task ideas</p>
+          </div>
+
+          <!-- Parallel Jobs -->
+          <div class="bg-slate-900/60 border border-darkborder/80 rounded-xl p-3.5">
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">
+              <i class="fa-solid fa-bolt mr-1.5 text-emerald-400"></i> Parallel Lanes (--jobs)
+            </label>
+            <select id="selectJobs" class="w-full bg-slate-800 border border-darkborder rounded-lg px-2.5 py-1.5 text-sm text-white focus:ring-brand-500">
+              <option value="2">2 Concurrent Workers</option>
+              <option value="4" selected>4 Concurrent Workers</option>
+              <option value="8">8 Concurrent Workers</option>
+            </select>
+            <p class="text-[11px] text-slate-500 mt-1">Lanes run concurrently</p>
+          </div>
+
+          <!-- Timeout Budget -->
+          <div class="bg-slate-900/60 border border-darkborder/80 rounded-xl p-3.5">
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">
+              <i class="fa-solid fa-stopwatch mr-1.5 text-rose-400"></i> Max Budget (Seconds)
+            </label>
+            <input type="number" id="inputBudget" value="900" min="60" max="9000" class="w-full bg-slate-800 border border-darkborder rounded-lg px-2.5 py-1.5 text-sm text-white" />
+            <p class="text-[11px] text-slate-500 mt-1">Default 900s (15 min)</p>
+          </div>
+        </div>
+
+        <!-- Action Button -->
+        <div class="flex items-center justify-end pt-2">
+          <button 
+            type="submit" 
+            id="btnSubmit" 
+            class="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-brand-500/25 transition transform active:scale-95 flex items-center justify-center space-x-2">
+            <i class="fa-solid fa-play"></i>
+            <span>Run Quality Audit</span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Live Execution Status & Logs Card -->
+    <section id="sectionProgress" class="hidden bg-darkcard border border-darkborder rounded-2xl p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div id="statusSpinner" class="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+          <div>
+            <h3 class="font-semibold text-white text-base flex items-center space-x-2">
+              <span>Audit in Progress:</span>
+              <span id="txtCurrentStatus" class="text-brand-400 font-mono text-sm uppercase">measuring</span>
+            </h3>
+            <p id="txtJobMeta" class="text-xs text-slate-400 mt-0.5">Job ID: ...</p>
+          </div>
+        </div>
+        <button onclick="toggleTerminal()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+          <i class="fa-solid fa-terminal mr-1"></i> <span id="btnTerminalToggleText">Collapse Logs</span>
+        </button>
+      </div>
+
+      <!-- Live Terminal Console -->
+      <div id="terminalContainer" class="bg-slate-950 border border-slate-800 rounded-xl p-4 h-64 overflow-y-auto terminal-font text-xs text-slate-300 space-y-1 select-text">
+        <div id="terminalLogs" class="space-y-0.5"></div>
+      </div>
+    </section>
+
+    <!-- Results Presentation Section -->
+    <section id="sectionResults" class="hidden space-y-8">
+      
+      <!-- Top Action Bar for Downloads -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-darkcard border border-darkborder rounded-2xl p-4 shadow-lg">
+        <div>
+          <span class="text-xs font-semibold text-emerald-400 uppercase tracking-wider flex items-center">
+            <i class="fa-solid fa-circle-check mr-1.5"></i> Measurement Completed
+          </span>
+          <h2 id="resRepoName" class="text-xl font-bold text-white mt-0.5">Repository Results</h2>
+        </div>
+        <!-- Download Buttons -->
+        <div class="flex flex-wrap gap-2">
+          <button onclick="downloadFile('measurement_json')" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center space-x-1.5 shadow-sm">
+            <i class="fa-solid fa-file-code text-indigo-400"></i>
+            <span>measurement.json</span>
+          </button>
+          <button onclick="downloadFile('codebase_repos_json')" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center space-x-1.5 shadow-sm">
+            <i class="fa-solid fa-file-lines text-blue-400"></i>
+            <span>codebase_repos.json</span>
+          </button>
+          <button onclick="downloadFile('codebase_repos_csv')" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center space-x-1.5 shadow-sm">
+            <i class="fa-solid fa-file-csv text-emerald-400"></i>
+            <span>CSV Scorecard</span>
+          </button>
+          <button onclick="downloadFile('mining_json')" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl border border-slate-700 transition flex items-center space-x-1.5 shadow-sm">
+            <i class="fa-solid fa-brain text-purple-400"></i>
+            <span>Mining Tasks</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Scorecards Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <!-- Archetype Card -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 shadow-lg relative overflow-hidden">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+            <span>Archetype</span>
+            <i class="fa-solid fa-shapes text-indigo-400 text-base"></i>
+          </div>
+          <p id="kpiArchetype" class="text-2xl font-bold text-white mt-2">--</p>
+          <div id="kpiMonorepoBadge" class="mt-2 text-xs text-slate-400">Confidence: --</div>
+        </div>
+
+        <!-- LOC & Size Card -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 shadow-lg relative overflow-hidden">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+            <span>Codebase Size</span>
+            <i class="fa-solid fa-code text-blue-400 text-base"></i>
+          </div>
+          <p id="kpiLOC" class="text-2xl font-bold text-white mt-2">--</p>
+          <div id="kpiFilesCount" class="mt-2 text-xs text-slate-400">-- files analyzed</div>
+        </div>
+
+        <!-- Build & Runnability Card -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 shadow-lg relative overflow-hidden">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+            <span>Build Health</span>
+            <i class="fa-solid fa-hammer text-amber-400 text-base"></i>
+          </div>
+          <div class="flex items-center space-x-2 mt-2">
+            <span id="kpiBuildOk" class="text-2xl font-bold text-emerald-400">--</span>
+          </div>
+          <div id="kpiRunnability" class="mt-2 text-xs text-slate-400">Discover Runnability: -- / 3</div>
+        </div>
+
+        <!-- Tests Discovered Card -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-5 shadow-lg relative overflow-hidden">
+          <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase">
+            <span>Discovered Tests</span>
+            <i class="fa-solid fa-vial-circle-check text-purple-400 text-base"></i>
+          </div>
+          <p id="kpiTests" class="text-2xl font-bold text-white mt-2">--</p>
+          <div id="kpiFramework" class="mt-2 text-xs text-slate-400">Runner: --</div>
+        </div>
+      </div>
+
+      <!-- Visual Charts Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Language Breakdown Donut Chart -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-6 shadow-lg lg:col-span-1 flex flex-col">
+          <h3 class="text-base font-semibold text-white mb-1 flex items-center justify-between">
+            <span>Language Distribution</span>
+            <i class="fa-solid fa-chart-pie text-slate-500 text-sm"></i>
+          </h3>
+          <p class="text-xs text-slate-400 mb-4">Share of total Lines of Code</p>
+          <div class="flex-1 flex items-center justify-center relative min-h-[220px]">
+            <canvas id="chartLanguages"></canvas>
+          </div>
+        </div>
+
+        <!-- AST Complexity & Structure Radar/Bar Chart -->
+        <div class="bg-darkcard border border-darkborder rounded-2xl p-6 shadow-lg lg:col-span-2 flex flex-col">
+          <h3 class="text-base font-semibold text-white mb-1 flex items-center justify-between">
+            <span>Structural & AST Complexity</span>
+            <i class="fa-solid fa-network-wired text-slate-500 text-sm"></i>
+          </h3>
+          <p class="text-xs text-slate-400 mb-4">Tree-sitter AST depth, cyclomatic complexity & function volume</p>
+          <div class="flex-1 flex items-center justify-center relative min-h-[220px]">
+            <canvas id="chartComplexity"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detailed Breakdown Tabs -->
+      <div class="bg-darkcard border border-darkborder rounded-2xl p-6 shadow-lg space-y-6">
+        <div class="flex border-b border-darkborder space-x-6 text-sm font-medium">
+          <button id="subtab1" onclick="switchDetailTab('tabTree')" class="pb-3 border-b-2 border-brand-500 text-brand-400 transition">
+            <i class="fa-solid fa-folder-tree mr-1.5"></i> Tree & CI Signals
+          </button>
+          <button id="subtab2" onclick="switchDetailTab('tabGit')" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-white transition">
+            <i class="fa-solid fa-code-commit mr-1.5"></i> Git History
+          </button>
+          <button id="subtab3" onclick="switchDetailTab('tabMining')" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-white transition">
+            <i class="fa-solid fa-lightbulb mr-1.5"></i> Benchmark Mining
+          </button>
+          <button id="subtab4" onclick="switchDetailTab('tabRaw')" class="pb-3 border-b-2 border-transparent text-slate-400 hover:text-white transition">
+            <i class="fa-solid fa-code mr-1.5"></i> Raw JSON
+          </button>
+        </div>
+
+        <!-- Subtab 1: Tree & CI -->
+        <div id="tabTree" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div class="bg-slate-900/60 p-4 rounded-xl border border-darkborder">
+              <span class="text-xs text-slate-400 uppercase font-semibold">CI Configuration</span>
+              <p id="dtCIStatus" class="font-bold text-white mt-1">--</p>
+              <p id="dtCIRunTests" class="text-xs text-slate-500 mt-1">Runs tests: --</p>
+            </div>
+            <div class="bg-slate-900/60 p-4 rounded-xl border border-darkborder">
+              <span class="text-xs text-slate-400 uppercase font-semibold">Package Ecosystem</span>
+              <p id="dtPackageManager" class="font-bold text-white mt-1">--</p>
+              <p id="dtLockfile" class="text-xs text-slate-500 mt-1">Lockfile present: --</p>
+            </div>
+            <div class="bg-slate-900/60 p-4 rounded-xl border border-darkborder">
+              <span class="text-xs text-slate-400 uppercase font-semibold">Declared Runtime</span>
+              <p id="dtRuntime" class="font-bold text-white mt-1">--</p>
+              <p id="dtRuntimeUsed" class="text-xs text-slate-500 mt-1">Runtime used: --</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtab 2: Git History -->
+        <div id="tabGit" class="hidden space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+            <div class="bg-slate-900/60 p-4 rounded-xl border border-darkborder">
+              <span class="text-xs text-slate-400 uppercase font-semibold">Total Commits</span>
+              <p id="dtGitCommits" class="font-bold text-white mt-1">--</p>
+            </div>
+            <div class="bg-slate-900/60 p-4 rounded-xl border border-darkborder">
+              <span class="text-xs text-slate-400 uppercase font-semibold">Active Dev Days</span>
+              <p id="dtGitActiveDays" class="font-bold text-white mt-1">--</p>
+            </div>
+            <div class="bg-slate-900/60 p-4 rounded-xl border border-darkborder">
+              <span class="text-xs text-slate-400 uppercase font-semibold">Minable Commits</span>
+              <p id="dtGitMinable" class="font-bold text-white mt-1">--</p>
+            </div>
+            <div class="bg-slate-900/60 p-4 rounded-xl border border-darkborder">
+              <span class="text-xs text-slate-400 uppercase font-semibold">History Span</span>
+              <p id="dtGitSpan" class="font-bold text-white mt-1">--</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtab 3: Benchmark Mining -->
+        <div id="tabMining" class="hidden space-y-4">
+          <div id="miningSummary" class="text-sm text-slate-300">
+            <!-- Populated dynamically -->
+          </div>
+          <div id="miningTasksList" class="space-y-2">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Subtab 4: Raw JSON -->
+        <div id="tabRaw" class="hidden space-y-2">
+          <pre id="rawJsonContainer" class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs terminal-font text-emerald-400 h-96 overflow-auto select-text"></pre>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- History Modal -->
+  <div id="modalHistory" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-darkcard border border-darkborder rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[80vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-darkborder">
+        <h3 class="text-lg font-bold text-white flex items-center">
+          <i class="fa-solid fa-clock-rotate-left mr-2 text-brand-400"></i> Audit History
+        </h3>
+        <button onclick="toggleHistoryModal()" class="text-slate-400 hover:text-white p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div id="historyList" class="flex-1 overflow-y-auto space-y-2 text-sm">
+        <p class="text-slate-500 text-center py-6">No previous audits found in this session.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Application Logic -->
+  <script>
+    let currentJobId = null;
+    let pollInterval = null;
+    let targetType = 'local';
+    let langChartInstance = null;
+    let complexityChartInstance = null;
+
+    function setTargetType(type) {
+      targetType = type;
+      const tabLocal = document.getElementById('tabLocal');
+      const tabRemote = document.getElementById('tabRemote');
+      const lblTarget = document.getElementById('lblTarget');
+      const inputTarget = document.getElementById('inputTarget');
+      const targetIcon = document.getElementById('targetIcon');
+      const btnQuickCurrent = document.getElementById('btnQuickCurrent');
+
+      if (type === 'local') {
+        tabLocal.className = "px-4 py-1.5 rounded-lg text-sm font-medium transition bg-brand-600 text-white shadow";
+        tabRemote.className = "px-4 py-1.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-white";
+        lblTarget.textContent = "Local Repository Absolute Path";
+        inputTarget.placeholder = "e.g. C:\\Users\\username\\projects\\my-app";
+        targetIcon.className = "fa-solid fa-folder";
+        btnQuickCurrent.classList.remove('hidden');
+      } else {
+        tabRemote.className = "px-4 py-1.5 rounded-lg text-sm font-medium transition bg-brand-600 text-white shadow";
+        tabLocal.className = "px-4 py-1.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-white";
+        lblTarget.textContent = "Git Repository Clone URL";
+        inputTarget.placeholder = "e.g. https://github.com/psf/requests.git";
+        targetIcon.className = "fa-brands fa-github";
+        btnQuickCurrent.classList.add('hidden');
+      }
+    }
+
+    function fillCurrentDir() {
+      // Auto-fill current measure-ext path
+      document.getElementById('inputTarget').value = "C:\\Users\\rohit\\.gemini\\antigravity\\scratch\\repo-quality-measure-ext\\measure-ext";
+    }
+
+    function handleLLMChange() {
+      const mode = document.getElementById('selectLLMMode').value;
+      if (mode !== 'no_llm') {
+        alert("Note: Model lanes require the chosen provider CLI (claude/gemini/codex) to be installed and authenticated on your machine.");
+      }
+    }
+
+    async function handleStartAudit(e) {
+      e.preventDefault();
+      const target = document.getElementById('inputTarget').value.trim();
+      const buildMode = document.getElementById('selectBuildMode').value;
+      const llmMode = document.getElementById('selectLLMMode').value;
+      const jobs = parseInt(document.getElementById('selectJobs').value) || 4;
+      const budget = parseInt(document.getElementById('inputBudget').value) || 900;
+
+      const payload = {
+        target: target,
+        target_type: targetType,
+        build_mode: buildMode,
+        no_llm: llmMode === 'no_llm',
+        provider: llmMode !== 'no_llm' ? llmMode : null,
+        jobs: jobs,
+        budget_seconds: budget
+      };
+
+      const btnSubmit = document.getElementById('btnSubmit');
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Launching...`;
+
+      try {
+        const response = await fetch('/api/audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          alert(`Error: ${data.error || 'Failed to start audit'}`);
+          btnSubmit.disabled = false;
+          btnSubmit.innerHTML = `<i class="fa-solid fa-play mr-2"></i> Run Quality Audit`;
+          return;
+        }
+
+        currentJobId = data.job_id;
+        document.getElementById('sectionProgress').classList.remove('hidden');
+        document.getElementById('sectionResults').classList.add('hidden');
+        document.getElementById('terminalLogs').innerHTML = '';
+        document.getElementById('txtJobMeta').textContent = `Job ID: ${currentJobId} | Target: ${target}`;
+
+        // Scroll to progress
+        document.getElementById('sectionProgress').scrollIntoView({ behavior: 'smooth' });
+
+        if (pollInterval) clearInterval(pollInterval);
+        pollInterval = setInterval(pollJobStatus, 1500);
+
+      } catch (err) {
+        alert(`Network Error: ${err.message}`);
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = `<i class="fa-solid fa-play mr-2"></i> Run Quality Audit`;
+      }
+    }
+
+    async function pollJobStatus() {
+      if (!currentJobId) return;
+
+      try {
+        const res = await fetch(`/api/jobs/${currentJobId}`);
+        if (!res.ok) return;
+        const job = await res.json();
+
+        // Update Status Badge & Logs
+        document.getElementById('txtCurrentStatus').textContent = job.status;
+        const terminalLogs = document.getElementById('terminalLogs');
+        terminalLogs.innerHTML = job.logs.map(l => `<div class="leading-relaxed hover:bg-slate-900 px-1 rounded">${escapeHtml(l)}</div>`).join('');
+        
+        // Auto scroll terminal
+        const termBox = document.getElementById('terminalContainer');
+        termBox.scrollTop = termBox.scrollHeight;
+
+        if (job.status === 'completed') {
+          clearInterval(pollInterval);
+          document.getElementById('statusSpinner').className = "fa-solid fa-check text-emerald-400 text-xl";
+          renderResults(job);
+          resetSubmitButton();
+        } else if (job.status === 'failed') {
+          clearInterval(pollInterval);
+          document.getElementById('statusSpinner').className = "fa-solid fa-xmark text-rose-500 text-xl";
+          alert(`Audit Failed: ${job.error || 'Unknown error occurred'}`);
+          resetSubmitButton();
+        }
+      } catch (e) {
+        console.error("Polling error:", e);
+      }
+    }
+
+    function resetSubmitButton() {
+      const btnSubmit = document.getElementById('btnSubmit');
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = `<i class="fa-solid fa-play mr-2"></i> Run Quality Audit`;
+    }
+
+    function renderResults(job) {
+      const results = job.results || {};
+      const measurement = results.measurement || {};
+      const codebase = results.codebase_repos || {};
+      const mining = results.mining || {};
+
+      const tree = measurement.tree || {};
+      const ext = measurement.ext_signals || {};
+      const build = ext.build || {};
+      const struct = ext.code_structure || {};
+      const git = measurement.git || {};
+      const classification = measurement.classification || {};
+      const material = measurement.material || {};
+
+      // Reveal Results Section
+      document.getElementById('sectionResults').classList.remove('hidden');
+      document.getElementById('resRepoName').textContent = measurement.real_repo_name || job.target.split(/[\\/]/).pop() || "Repository Audit";
+
+      // 1. KPI Cards
+      document.getElementById('kpiArchetype').textContent = classification.primary_class || codebase.primary_class || "General";
+      document.getElementById('kpiMonorepoBadge').textContent = `Monorepo: ${classification.is_monorepo ? 'Yes' : 'No'} | Demo: ${classification.is_likely_demo ? 'Yes' : 'No'}`;
+
+      const totalLoc = tree.total_loc || codebase.total_loc || 0;
+      document.getElementById('kpiLOC').textContent = Number(totalLoc).toLocaleString() + " LOC";
+      document.getElementById('kpiFilesCount').textContent = `${tree.total_files || '--'} source files`;
+
+      const buildOk = build.build_ok !== undefined ? build.build_ok : codebase.build_ok;
+      const kpiBuildOk = document.getElementById('kpiBuildOk');
+      if (buildOk === true) {
+        kpiBuildOk.textContent = "PASSING";
+        kpiBuildOk.className = "text-2xl font-bold text-emerald-400";
+      } else if (buildOk === false) {
+        kpiBuildOk.textContent = "FAILING";
+        kpiBuildOk.className = "text-2xl font-bold text-rose-400";
+      } else {
+        kpiBuildOk.textContent = "UNMEASURED";
+        kpiBuildOk.className = "text-2xl font-bold text-slate-400";
+      }
+
+      const discoverRun = build.discover_runnability !== undefined ? build.discover_runnability : codebase.discover_runnability;
+      document.getElementById('kpiRunnability').textContent = `Discover Runnability: ${discoverRun !== null && discoverRun !== undefined ? discoverRun + ' / 3' : 'N/A'}`;
+
+      const testsDiscovered = build.tests_discovered !== undefined ? build.tests_discovered : codebase.tests_discovered;
+      document.getElementById('kpiTests').textContent = testsDiscovered !== null && testsDiscovered !== undefined ? testsDiscovered : "0";
+      document.getElementById('kpiFramework').textContent = `Runner: ${build.test_runner || 'None detected'}`;
+
+      // 2. Charts
+      renderLanguageChart(tree.languages || {});
+      renderComplexityChart(struct);
+
+      // 3. Tree & CI Subtab
+      document.getElementById('dtCIStatus').textContent = tree.ci_system || (tree.has_ci ? "Detected" : "None");
+      document.getElementById('dtCIRunTests').textContent = `Runs tests: ${tree.ci_runs_tests ? 'Yes' : 'No'}`;
+      document.getElementById('dtPackageManager').textContent = tree.package_manager || "None detected";
+      document.getElementById('dtLockfile').textContent = `Lockfile: ${tree.has_lockfile ? 'Yes' : 'No'}`;
+      document.getElementById('dtRuntime').textContent = build.runtime_requested || "Auto-detected";
+      document.getElementById('dtRuntimeUsed').textContent = `Used: ${build.runtime_used || 'Host system default'}`;
+
+      // 4. Git Subtab
+      document.getElementById('dtGitCommits').textContent = git.total_commits || codebase.total_commits || "--";
+      document.getElementById('dtGitActiveDays').textContent = git.active_days || codebase.active_days || "--";
+      document.getElementById('dtGitMinable').textContent = ext.git_history?.mineable_commits || codebase.capacity || "--";
+      document.getElementById('dtGitSpan').textContent = `${git.history_span_months || '--'} months`;
+
+      // 5. Mining Subtab
+      const miningContainer = document.getElementById('miningTasksList');
+      const summaries = mining.mined_task_summaries || [];
+      const counts = mining.task_type_counts || {};
+
+      document.getElementById('miningSummary').innerHTML = `
+        <div class="flex flex-wrap gap-2 mb-4">
+          <span class="px-2.5 py-1 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">Features: ${counts.substantial_features || 0}</span>
+          <span class="px-2.5 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Defect Repairs: ${counts.defect_repairs || 0}</span>
+          <span class="px-2.5 py-1 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">Evolutions: ${counts.repo_evolutions || 0}</span>
+          <span class="px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Hardening: ${counts.hardening_work || 0}</span>
+        </div>
+      `;
+
+      if (summaries.length > 0) {
+        miningContainer.innerHTML = summaries.map(s => `
+          <div class="bg-slate-900/80 p-3 rounded-xl border border-darkborder flex items-start space-x-3 text-xs">
+            <i class="fa-solid fa-check text-brand-400 mt-0.5"></i>
+            <span class="text-slate-300 font-mono">${escapeHtml(s)}</span>
+          </div>
+        `).join('');
+      } else {
+        miningContainer.innerHTML = `<p class="text-slate-500 text-xs py-2">No LLM task mining ran or repository has no minable candidates (run with LLM enabled to generate candidates).</p>`;
+      }
+
+      // 6. Raw JSON
+      document.getElementById('rawJsonContainer').textContent = JSON.stringify(measurement, null, 2);
+
+      // Scroll to results
+      document.getElementById('sectionResults').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function renderLanguageChart(languages) {
+      const ctx = document.getElementById('chartLanguages').getContext('2d');
+      if (langChartInstance) langChartInstance.destroy();
+
+      const labels = Object.keys(languages);
+      const data = Object.values(languages);
+
+      if (labels.length === 0) {
+        labels.push("Other");
+        data.push(1);
+      }
+
+      const colors = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#64748b'];
+
+      langChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: colors.slice(0, labels.length),
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 11 } } }
+          },
+          cutout: '70%'
+        }
+      });
+    }
+
+    function renderComplexityChart(struct) {
+      const ctx = document.getElementById('chartComplexity').getContext('2d');
+      if (complexityChartInstance) complexityChartInstance.destroy();
+
+      const avgCyclo = struct.avg_cyclomatic_complexity || struct.mean_cyclomatic || 0;
+      const maxCyclo = struct.max_cyclomatic_complexity || 0;
+      const maxDepth = struct.max_ast_depth || struct.max_depth || 0;
+      const funcCount = struct.total_functions || struct.function_count || 0;
+
+      complexityChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Avg Cyclomatic', 'Max Cyclomatic', 'Max AST Depth', 'Functions (÷10)'],
+          datasets: [{
+            label: 'Structural Complexity',
+            data: [avgCyclo, maxCyclo, maxDepth, funcCount / 10],
+            backgroundColor: ['#6366f1', '#f59e0b', '#ec4899', '#10b981'],
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+          }
+        }
+      });
+    }
+
+    function switchDetailTab(tabId) {
+      ['tabTree', 'tabGit', 'tabMining', 'tabRaw'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+      });
+      document.getElementById(tabId).classList.remove('hidden');
+
+      ['subtab1', 'subtab2', 'subtab3', 'subtab4'].forEach(id => {
+        document.getElementById(id).className = "pb-3 border-b-2 border-transparent text-slate-400 hover:text-white transition";
+      });
+
+      if (tabId === 'tabTree') document.getElementById('subtab1').className = "pb-3 border-b-2 border-brand-500 text-brand-400 transition";
+      if (tabId === 'tabGit') document.getElementById('subtab2').className = "pb-3 border-b-2 border-brand-500 text-brand-400 transition";
+      if (tabId === 'tabMining') document.getElementById('subtab3').className = "pb-3 border-b-2 border-brand-500 text-brand-400 transition";
+      if (tabId === 'tabRaw') document.getElementById('subtab4').className = "pb-3 border-b-2 border-brand-500 text-brand-400 transition";
+    }
+
+    function downloadFile(fileType) {
+      if (!currentJobId) return;
+      window.location.href = `/api/download/${currentJobId}/${fileType}`;
+    }
+
+    function toggleTerminal() {
+      const box = document.getElementById('terminalContainer');
+      const txt = document.getElementById('btnTerminalToggleText');
+      if (box.classList.contains('hidden')) {
+        box.classList.remove('hidden');
+        txt.textContent = "Collapse Logs";
+      } else {
+        box.classList.add('hidden');
+        txt.textContent = "Expand Logs";
+      }
+    }
+
+    async function toggleHistoryModal() {
+      const modal = document.getElementById('modalHistory');
+      if (modal.classList.contains('hidden')) {
+        modal.classList.remove('hidden');
+        try {
+          const res = await fetch('/api/history');
+          const list = await res.json();
+          const container = document.getElementById('historyList');
+          if (list.length === 0) {
+            container.innerHTML = `<p class="text-slate-500 text-center py-6">No previous audits found in this session.</p>`;
+          } else {
+            container.innerHTML = list.map(item => `
+              <div class="bg-slate-900 p-3 rounded-xl border border-darkborder flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-white text-xs truncate max-w-sm">${escapeHtml(item.target)}</p>
+                  <p class="text-[10px] text-slate-400">${item.created_at} | Type: ${item.target_type}</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <span class="text-xs px-2 py-0.5 rounded ${item.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}">${item.status}</span>
+                </div>
+              </div>
+            `).join('');
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        modal.classList.add('hidden');
+      }
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+  </script>
+</body>
+</html>
