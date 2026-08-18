@@ -55,8 +55,9 @@
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
           Privacy Allowlist Active
         </span>
-        <button id="btnHistoryToggle" onclick="toggleHistoryModal()" class="text-slate-300 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition">
-          <i class="fa-solid fa-clock-rotate-left"></i> History
+        <button id="btnHistoryToggle" onclick="toggleHistoryModal()" class="text-slate-300 hover:text-white px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium transition flex items-center space-x-1.5">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+          <span>History & Past Audits</span>
         </button>
       </div>
     </div>
@@ -76,11 +77,11 @@
         </div>
         <!-- Target Type Tabs -->
         <div class="flex bg-slate-900/90 p-1 rounded-xl border border-darkborder self-start">
-          <button id="tabLocal" onclick="setTargetType('local')" class="px-4 py-1.5 rounded-lg text-sm font-medium transition bg-brand-600 text-white shadow">
-            <i class="fa-solid fa-folder-open mr-1.5"></i> Local Directory
+          <button id="tabRemote" onclick="setTargetType('remote')" class="px-4 py-1.5 rounded-lg text-sm font-medium transition bg-brand-600 text-white shadow">
+            <i class="fa-brands fa-github mr-1.5"></i> Git URL (Cloud / Render)
           </button>
-          <button id="tabRemote" onclick="setTargetType('remote')" class="px-4 py-1.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-white">
-            <i class="fa-brands fa-github mr-1.5"></i> Git URL
+          <button id="tabLocal" onclick="setTargetType('local')" class="px-4 py-1.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-white">
+            <i class="fa-solid fa-folder-open mr-1.5"></i> Local Directory
           </button>
         </div>
       </div>
@@ -89,24 +90,31 @@
         <!-- Target Input -->
         <div>
           <label id="lblTarget" class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-            Local Repository Absolute Path
+            Git Repository Clone URL
           </label>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-              <i id="targetIcon" class="fa-solid fa-folder"></i>
+              <i id="targetIcon" class="fa-brands fa-github"></i>
             </div>
             <input 
               type="text" 
               id="inputTarget" 
               required 
-              placeholder="e.g. C:\Users\username\projects\my-app" 
-              class="w-full bg-slate-900/90 border border-darkborder focus:border-brand-500 focus:ring-1 focus:ring-brand-500 rounded-xl pl-10 pr-24 py-3 text-sm text-white placeholder-slate-500 transition"
+              placeholder="e.g. https://github.com/rohith1246/ELEVATEIQFINAL.git" 
+              class="w-full bg-slate-900/90 border border-darkborder focus:border-brand-500 focus:ring-1 focus:ring-brand-500 rounded-xl pl-10 pr-28 py-3 text-sm text-white placeholder-slate-500 transition"
             />
+            <button 
+              type="button" 
+              onclick="fillSampleUrl('elevate')" 
+              id="btnSampleElevate" 
+              class="absolute right-2.5 top-2.5 text-xs bg-slate-800 hover:bg-slate-700 text-brand-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+              Sample Repo
+            </button>
             <button 
               type="button" 
               onclick="fillCurrentDir()" 
               id="btnQuickCurrent" 
-              class="absolute right-2.5 top-2.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+              class="hidden absolute right-2.5 top-2.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
               Use Current
             </button>
           </div>
@@ -121,8 +129,8 @@
             </label>
             <select id="selectBuildMode" class="w-full bg-slate-800 border border-darkborder rounded-lg px-2.5 py-1.5 text-sm text-white focus:ring-brand-500">
               <option value="discover" selected>discover (Safe test discovery)</option>
+              <option value="none">none (Fast static AST &lt; 5s)</option>
               <option value="full">full (Execute test suite)</option>
-              <option value="none">none (Static AST only)</option>
             </select>
             <p class="text-[11px] text-slate-500 mt-1">Queries runner for test collection</p>
           </div>
@@ -165,7 +173,7 @@
         </div>
 
         <!-- Action Button -->
-        <div class="flex items-center justify-end pt-2">
+        <div class="flex items-center justify-end space-x-3 pt-2">
           <button 
             type="submit" 
             id="btnSubmit" 
@@ -181,18 +189,23 @@
     <section id="sectionProgress" class="hidden bg-darkcard border border-darkborder rounded-2xl p-6 shadow-xl space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-3">
-          <div id="statusSpinner" class="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+          <div id="statusSpinner" class="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
           <div>
             <h3 class="font-semibold text-white text-base flex items-center space-x-2">
-              <span>Audit in Progress:</span>
-              <span id="txtCurrentStatus" class="text-brand-400 font-mono text-sm uppercase">measuring</span>
+              <span>Audit Status:</span>
+              <span id="txtCurrentStatus" class="text-brand-400 font-mono text-sm uppercase px-2 py-0.5 rounded bg-brand-500/10 border border-brand-500/20">measuring</span>
             </h3>
             <p id="txtJobMeta" class="text-xs text-slate-400 mt-0.5">Job ID: ...</p>
           </div>
         </div>
-        <button onclick="toggleTerminal()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
-          <i class="fa-solid fa-terminal mr-1"></i> <span id="btnTerminalToggleText">Collapse Logs</span>
-        </button>
+        <div class="flex items-center space-x-2">
+          <button onclick="resetAuditView()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+            <i class="fa-solid fa-rotate-left mr-1"></i> New Audit
+          </button>
+          <button onclick="toggleTerminal()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+            <i class="fa-solid fa-terminal mr-1"></i> <span id="btnTerminalToggleText">Collapse Logs</span>
+          </button>
+        </div>
       </div>
 
       <!-- Live Terminal Console -->
@@ -390,14 +403,14 @@
     <div class="bg-darkcard border border-darkborder rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[80vh] flex flex-col">
       <div class="flex items-center justify-between pb-3 border-b border-darkborder">
         <h3 class="text-lg font-bold text-white flex items-center">
-          <i class="fa-solid fa-clock-rotate-left mr-2 text-brand-400"></i> Audit History
+          <i class="fa-solid fa-clock-rotate-left mr-2 text-brand-400"></i> Past Audit History
         </h3>
         <button onclick="toggleHistoryModal()" class="text-slate-400 hover:text-white p-1">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
       <div id="historyList" class="flex-1 overflow-y-auto space-y-2 text-sm">
-        <p class="text-slate-500 text-center py-6">No previous audits found in this session.</p>
+        <p class="text-slate-500 text-center py-6">Loading past audits...</p>
       </div>
     </div>
   </div>
@@ -406,7 +419,7 @@
   <script>
     let currentJobId = null;
     let pollInterval = null;
-    let targetType = 'local';
+    let targetType = 'remote';
     let langChartInstance = null;
     let complexityChartInstance = null;
 
@@ -418,6 +431,7 @@
       const inputTarget = document.getElementById('inputTarget');
       const targetIcon = document.getElementById('targetIcon');
       const btnQuickCurrent = document.getElementById('btnQuickCurrent');
+      const btnSampleElevate = document.getElementById('btnSampleElevate');
 
       if (type === 'local') {
         tabLocal.className = "px-4 py-1.5 rounded-lg text-sm font-medium transition bg-brand-600 text-white shadow";
@@ -426,19 +440,26 @@
         inputTarget.placeholder = "e.g. C:\\Users\\username\\projects\\my-app";
         targetIcon.className = "fa-solid fa-folder";
         btnQuickCurrent.classList.remove('hidden');
+        btnSampleElevate.classList.add('hidden');
       } else {
         tabRemote.className = "px-4 py-1.5 rounded-lg text-sm font-medium transition bg-brand-600 text-white shadow";
         tabLocal.className = "px-4 py-1.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-white";
         lblTarget.textContent = "Git Repository Clone URL";
-        inputTarget.placeholder = "e.g. https://github.com/psf/requests.git";
+        inputTarget.placeholder = "e.g. https://github.com/rohith1246/ELEVATEIQFINAL.git";
         targetIcon.className = "fa-brands fa-github";
         btnQuickCurrent.classList.add('hidden');
+        btnSampleElevate.classList.remove('hidden');
+      }
+    }
+
+    function fillSampleUrl(type) {
+      if (type === 'elevate') {
+        document.getElementById('inputTarget').value = "https://github.com/rohith1246/ELEVATEIQFINAL.git";
       }
     }
 
     function fillCurrentDir() {
-      // Auto-fill current measure-ext path
-      document.getElementById('inputTarget').value = "C:\\Users\\rohit\\.gemini\\antigravity\\scratch\\repo-quality-measure-ext\\measure-ext";
+      document.getElementById('inputTarget').value = "D:\\repo-quality-measure-ext";
     }
 
     function handleLLMChange() {
@@ -446,6 +467,13 @@
       if (mode !== 'no_llm') {
         alert("Note: Model lanes require the chosen provider CLI (claude/gemini/codex) to be installed and authenticated on your machine.");
       }
+    }
+
+    function resetAuditView() {
+      if (pollInterval) clearInterval(pollInterval);
+      document.getElementById('sectionProgress').classList.add('hidden');
+      document.getElementById('sectionResults').classList.add('hidden');
+      resetSubmitButton();
     }
 
     async function handleStartAudit(e) {
@@ -480,27 +508,30 @@
         const data = await response.json();
         if (!response.ok) {
           alert(`Error: ${data.error || 'Failed to start audit'}`);
-          btnSubmit.disabled = false;
-          btnSubmit.innerHTML = `<i class="fa-solid fa-play mr-2"></i> Run Quality Audit`;
+          resetSubmitButton();
           return;
         }
 
         currentJobId = data.job_id;
+        localStorage.setItem('last_audit_job_id', currentJobId);
+
         document.getElementById('sectionProgress').classList.remove('hidden');
         document.getElementById('sectionResults').classList.add('hidden');
-        document.getElementById('terminalLogs').innerHTML = '';
+        document.getElementById('terminalLogs').innerHTML = '<div class="text-slate-400">Initializing environment and starting workers...</div>';
         document.getElementById('txtJobMeta').textContent = `Job ID: ${currentJobId} | Target: ${target}`;
+        
+        const statusSpinner = document.getElementById('statusSpinner');
+        if (statusSpinner) statusSpinner.className = "w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin";
 
         // Scroll to progress
         document.getElementById('sectionProgress').scrollIntoView({ behavior: 'smooth' });
 
         if (pollInterval) clearInterval(pollInterval);
-        pollInterval = setInterval(pollJobStatus, 1500);
+        pollInterval = setInterval(pollJobStatus, 2000);
 
       } catch (err) {
         alert(`Network Error: ${err.message}`);
-        btnSubmit.disabled = false;
-        btnSubmit.innerHTML = `<i class="fa-solid fa-play mr-2"></i> Run Quality Audit`;
+        resetSubmitButton();
       }
     }
 
@@ -537,7 +568,7 @@
           clearInterval(pollInterval);
           const statusSpinner = document.getElementById('statusSpinner');
           if (statusSpinner) statusSpinner.className = "fa-solid fa-xmark text-rose-500 text-xl";
-          alert(`Audit Failed: ${job.error || 'Unknown error occurred'}`);
+          alert(`Audit Encountered an Issue: ${job.error || 'Check terminal logs above for details.'}`);
           resetSubmitButton();
         }
       } catch (e) {
@@ -687,7 +718,9 @@
     }
 
     function renderLanguageChart(languages) {
-      const ctx = document.getElementById('chartLanguages').getContext('2d');
+      const canvas = document.getElementById('chartLanguages');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
       if (langChartInstance) langChartInstance.destroy();
 
       const labels = Object.keys(languages);
@@ -722,7 +755,9 @@
     }
 
     function renderComplexityChart(struct) {
-      const ctx = document.getElementById('chartComplexity').getContext('2d');
+      const canvas = document.getElementById('chartComplexity');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
       if (complexityChartInstance) complexityChartInstance.destroy();
 
       const avgCyclo = struct.avg_cyclomatic_complexity || struct.mean_cyclomatic || 0;
@@ -757,12 +792,15 @@
 
     function switchDetailTab(tabId) {
       ['tabTree', 'tabGit', 'tabMining', 'tabRaw'].forEach(id => {
-        document.getElementById(id).classList.add('hidden');
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
       });
-      document.getElementById(tabId).classList.remove('hidden');
+      const activeEl = document.getElementById(tabId);
+      if (activeEl) activeEl.classList.remove('hidden');
 
       ['subtab1', 'subtab2', 'subtab3', 'subtab4'].forEach(id => {
-        document.getElementById(id).className = "pb-3 border-b-2 border-transparent text-slate-400 hover:text-white transition";
+        const btn = document.getElementById(id);
+        if (btn) btn.className = "pb-3 border-b-2 border-transparent text-slate-400 hover:text-white transition";
       });
 
       if (tabId === 'tabTree') document.getElementById('subtab1').className = "pb-3 border-b-2 border-brand-500 text-brand-400 transition";
@@ -797,16 +835,19 @@
           const list = await res.json();
           const container = document.getElementById('historyList');
           if (list.length === 0) {
-            container.innerHTML = `<p class="text-slate-500 text-center py-6">No previous audits found in this session.</p>`;
+            container.innerHTML = `<p class="text-slate-500 text-center py-6">No previous audits found.</p>`;
           } else {
             container.innerHTML = list.map(item => `
-              <div class="bg-slate-900 p-3 rounded-xl border border-darkborder flex items-center justify-between">
-                <div>
-                  <p class="font-medium text-white text-xs truncate max-w-sm">${escapeHtml(item.target)}</p>
-                  <p class="text-[10px] text-slate-400">${item.created_at} | Type: ${item.target_type}</p>
+              <div class="bg-slate-900 p-3.5 rounded-xl border border-darkborder flex items-center justify-between hover:border-brand-500/50 transition">
+                <div class="truncate max-w-md">
+                  <p class="font-medium text-white text-xs truncate">${escapeHtml(item.target)}</p>
+                  <p class="text-[10px] text-slate-400 mt-0.5">${item.created_at ? item.created_at.slice(0, 19).replace('T', ' ') : ''} | ID: ${item.id}</p>
                 </div>
                 <div class="flex items-center space-x-2">
-                  <span class="text-xs px-2 py-0.5 rounded ${item.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'}">${item.status}</span>
+                  <span class="text-xs px-2 py-0.5 rounded ${item.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}">${item.status}</span>
+                  <button onclick="loadHistoricJob('${item.id}')" class="text-xs bg-brand-600 hover:bg-brand-500 text-white px-3 py-1 rounded-lg transition font-medium">
+                    View
+                  </button>
                 </div>
               </div>
             `).join('');
@@ -816,6 +857,41 @@
         }
       } else {
         modal.classList.add('hidden');
+      }
+    }
+
+    async function loadHistoricJob(jobId) {
+      currentJobId = jobId;
+      const modal = document.getElementById('modalHistory');
+      if (modal) modal.classList.add('hidden');
+
+      document.getElementById('sectionProgress').classList.remove('hidden');
+      document.getElementById('sectionResults').classList.add('hidden');
+      document.getElementById('txtJobMeta').textContent = `Loading Historic Job ID: ${jobId}`;
+
+      try {
+        const res = await fetch(`/api/jobs/${jobId}`);
+        if (!res.ok) {
+          alert("Could not load historic job data.");
+          return;
+        }
+        const job = await res.json();
+        
+        const txtStatus = document.getElementById('txtCurrentStatus');
+        if (txtStatus) txtStatus.textContent = job.status || 'completed';
+
+        const terminalLogs = document.getElementById('terminalLogs');
+        if (terminalLogs && Array.isArray(job.logs)) {
+          terminalLogs.innerHTML = job.logs.map(l => `<div class="leading-relaxed hover:bg-slate-900 px-1 rounded">${escapeHtml(l)}</div>`).join('');
+        }
+
+        if (job.status === 'completed') {
+          const statusSpinner = document.getElementById('statusSpinner');
+          if (statusSpinner) statusSpinner.className = "fa-solid fa-check text-emerald-400 text-xl";
+          renderResults(job);
+        }
+      } catch (e) {
+        console.error(e);
       }
     }
 
