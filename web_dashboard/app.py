@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import uuid
+import copy
 import shutil
 import subprocess
 import threading
@@ -38,8 +39,8 @@ def save_job_meta(job_id, job_entry):
     job_dir.mkdir(parents=True, exist_ok=True)
     meta_path = job_dir / "job_meta.json"
     try:
-        # Don't persist huge logs inside meta file; logs live in audit.log
-        meta_copy = dict(job_entry)
+        with JOBS_LOCK:
+            meta_copy = copy.deepcopy(job_entry)
         meta_copy["logs"] = []  # stored separately in audit.log
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta_copy, f, indent=2)
@@ -48,9 +49,11 @@ def save_job_meta(job_id, job_entry):
 
 
 def load_job(job_id):
-    """Load job state from in-memory cache or disk (for multi-worker sync)."""
+    """Load job state safely from in-memory cache or disk (for multi-worker sync)."""
+    job = None
     with JOBS_LOCK:
-        job = JOBS.get(job_id)
+        if job_id in JOBS:
+            job = copy.deepcopy(JOBS[job_id])
 
     job_dir = SCRATCH_DIR / job_id
     meta_path = job_dir / "job_meta.json"
@@ -66,7 +69,7 @@ def load_job(job_id):
     if not job:
         return None
 
-    # Always ensure live logs from audit.log are included
+    # Load logs from audit.log
     logs = []
     if log_path.exists():
         try:
@@ -125,7 +128,7 @@ def run_measurement_thread(job_id, target_path, is_temp_clone, options):
         with JOBS_LOCK:
             if job_id in JOBS:
                 JOBS[job_id]["status"] = "measuring"
-                save_job_meta(job_id, JOBS[job_id])
+        save_job_meta(job_id, JOBS.get(job_id, {}))
 
         log(f"Starting measurement on target: {target_path}")
         log(f"Options: {options}")
@@ -256,7 +259,7 @@ def clone_and_run(job_id, git_url, options):
         with JOBS_LOCK:
             if job_id in JOBS:
                 JOBS[job_id]["status"] = "cloning"
-                save_job_meta(job_id, JOBS[job_id])
+        save_job_meta(job_id, JOBS.get(job_id, {}))
 
         log(f"Cloning remote repository: {git_url} ...")
         clone_cmd = ["git", "clone", "--depth", "100", git_url, str(job_clone_dir)]
@@ -276,7 +279,7 @@ def clone_and_run(job_id, git_url, options):
                 if job_id in JOBS:
                     JOBS[job_id]["status"] = "failed"
                     JOBS[job_id]["error"] = err_msg
-                    save_job_meta(job_id, JOBS[job_id])
+            save_job_meta(job_id, JOBS.get(job_id, {}))
             return
 
         log("Git clone successful. Proceeding to measurement...")
@@ -288,7 +291,7 @@ def clone_and_run(job_id, git_url, options):
             if job_id in JOBS:
                 JOBS[job_id]["status"] = "failed"
                 JOBS[job_id]["error"] = str(e)
-                save_job_meta(job_id, JOBS[job_id])
+        save_job_meta(job_id, JOBS.get(job_id, {}))
 
 
 # ---------------- Routes ----------------
@@ -296,6 +299,11 @@ def clone_and_run(job_id, git_url, options):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return "", 204
 
 
 @app.route("/api/audit", methods=["POST"])
@@ -348,7 +356,7 @@ def start_audit():
             with JOBS_LOCK:
                 JOBS[job_id]["status"] = "failed"
                 JOBS[job_id]["error"] = f"Local directory '{target_val}' does not exist."
-                save_job_meta(job_id, JOBS[job_id])
+            save_job_meta(job_id, JOBS.get(job_id, {}))
             return jsonify({"job_id": job_id, "status": "failed", "error": f"Path '{target_val}' not found."}), 400
 
         t = threading.Thread(target=run_measurement_thread, args=(job_id, local_path, False, options), daemon=True)
@@ -359,10 +367,13 @@ def start_audit():
 
 @app.route("/api/jobs/<job_id>", methods=["GET"])
 def get_job(job_id):
-    job = load_job(job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
-    return jsonify(job)
+    try:
+        job = load_job(job_id)
+        if not job:
+            return jsonify({"error": "Job not found", "job_id": job_id}), 404
+        return jsonify(job)
+    except Exception as e:
+        return jsonify({"error": str(e), "job_id": job_id}), 500
 
 
 @app.route("/api/history", methods=["GET"])

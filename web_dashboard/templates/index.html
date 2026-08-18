@@ -509,26 +509,34 @@
 
       try {
         const res = await fetch(`/api/jobs/${currentJobId}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          console.warn(`Polling status response: ${res.status}`);
+          return;
+        }
         const job = await res.json();
 
         // Update Status Badge & Logs
-        document.getElementById('txtCurrentStatus').textContent = job.status;
+        const txtStatus = document.getElementById('txtCurrentStatus');
+        if (txtStatus) txtStatus.textContent = job.status || 'processing';
+
         const terminalLogs = document.getElementById('terminalLogs');
-        terminalLogs.innerHTML = job.logs.map(l => `<div class="leading-relaxed hover:bg-slate-900 px-1 rounded">${escapeHtml(l)}</div>`).join('');
+        if (terminalLogs && Array.isArray(job.logs)) {
+          terminalLogs.innerHTML = job.logs.map(l => `<div class="leading-relaxed hover:bg-slate-900 px-1 rounded">${escapeHtml(l)}</div>`).join('');
+        }
         
         // Auto scroll terminal
         const termBox = document.getElementById('terminalContainer');
-        termBox.scrollTop = termBox.scrollHeight;
+        if (termBox) termBox.scrollTop = termBox.scrollHeight;
 
         if (job.status === 'completed') {
           clearInterval(pollInterval);
-          document.getElementById('statusSpinner').className = "fa-solid fa-check text-emerald-400 text-xl";
+          const statusSpinner = document.getElementById('statusSpinner');
+          if (statusSpinner) statusSpinner.className = "fa-solid fa-check text-emerald-400 text-xl";
           renderResults(job);
-          resetSubmitButton();
         } else if (job.status === 'failed') {
           clearInterval(pollInterval);
-          document.getElementById('statusSpinner').className = "fa-solid fa-xmark text-rose-500 text-xl";
+          const statusSpinner = document.getElementById('statusSpinner');
+          if (statusSpinner) statusSpinner.className = "fa-solid fa-xmark text-rose-500 text-xl";
           alert(`Audit Failed: ${job.error || 'Unknown error occurred'}`);
           resetSubmitButton();
         }
@@ -539,104 +547,143 @@
 
     function resetSubmitButton() {
       const btnSubmit = document.getElementById('btnSubmit');
-      btnSubmit.disabled = false;
-      btnSubmit.innerHTML = `<i class="fa-solid fa-play mr-2"></i> Run Quality Audit`;
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = `<i class="fa-solid fa-play mr-2"></i> Run Quality Audit`;
+      }
     }
 
     function renderResults(job) {
-      const results = job.results || {};
-      const measurement = results.measurement || {};
-      const codebase = results.codebase_repos || {};
-      const mining = results.mining || {};
+      try {
+        const results = job.results || {};
+        const measurement = results.measurement || {};
+        const codebase = results.codebase_repos || {};
+        const mining = results.mining || {};
 
-      const tree = measurement.tree || {};
-      const ext = measurement.ext_signals || {};
-      const build = ext.build || {};
-      const struct = ext.structure || ext.code_structure || {};
-      const git = measurement.git || {};
-      const classification = measurement.classification || {};
-      const material = measurement.material || {};
+        const tree = measurement.tree || {};
+        const ext = measurement.ext_signals || {};
+        const build = ext.build || {};
+        const struct = ext.structure || ext.code_structure || {};
+        const git = measurement.git || {};
+        const classification = measurement.classification || {};
+        const material = measurement.material || {};
 
-      // Reveal Results Section
-      document.getElementById('sectionResults').classList.remove('hidden');
-      document.getElementById('resRepoName').textContent = measurement.real_repo_name || job.target.split(/[\\/]/).pop() || "Repository Audit";
+        // Reveal Results Section
+        const secRes = document.getElementById('sectionResults');
+        if (secRes) secRes.classList.remove('hidden');
 
-      // 1. KPI Cards
-      document.getElementById('kpiArchetype').textContent = classification.primary_class || codebase.primary_class || codebase.repo_class || "General";
-      document.getElementById('kpiMonorepoBadge').textContent = `Monorepo: ${classification.is_monorepo ? 'Yes' : 'No'} | Demo: ${classification.is_likely_demo ? 'Yes' : 'No'}`;
+        const resRepoName = document.getElementById('resRepoName');
+        if (resRepoName) resRepoName.textContent = measurement.real_repo_name || (job.target ? job.target.split(/[\\/]/).pop() : "Repository Audit");
 
-      const totalLoc = tree.total_loc || codebase.loc || codebase.total_loc || 0;
-      document.getElementById('kpiLOC').textContent = Number(totalLoc).toLocaleString() + " LOC";
-      document.getElementById('kpiFilesCount').textContent = `${tree.total_source_files || tree.total_files || '--'} source files`;
+        // 1. KPI Cards
+        const kpiArchetype = document.getElementById('kpiArchetype');
+        if (kpiArchetype) kpiArchetype.textContent = classification.primary_class || codebase.primary_class || codebase.repo_class || "General";
 
-      const buildOk = build.build_ok !== undefined ? build.build_ok : codebase.build_ok;
-      const kpiBuildOk = document.getElementById('kpiBuildOk');
-      if (buildOk === true) {
-        kpiBuildOk.textContent = "PASSING";
-        kpiBuildOk.className = "text-2xl font-bold text-emerald-400";
-      } else if (buildOk === false) {
-        kpiBuildOk.textContent = "FAILING";
-        kpiBuildOk.className = "text-2xl font-bold text-rose-400";
-      } else {
-        kpiBuildOk.textContent = "UNMEASURED";
-        kpiBuildOk.className = "text-2xl font-bold text-slate-400";
+        const kpiMonorepoBadge = document.getElementById('kpiMonorepoBadge');
+        if (kpiMonorepoBadge) kpiMonorepoBadge.textContent = `Monorepo: ${classification.is_monorepo ? 'Yes' : 'No'} | Demo: ${classification.is_likely_demo ? 'Yes' : 'No'}`;
+
+        const totalLoc = tree.total_loc || codebase.loc || codebase.total_loc || 0;
+        const kpiLOC = document.getElementById('kpiLOC');
+        if (kpiLOC) kpiLOC.textContent = Number(totalLoc).toLocaleString() + " LOC";
+
+        const kpiFilesCount = document.getElementById('kpiFilesCount');
+        if (kpiFilesCount) kpiFilesCount.textContent = `${tree.total_source_files || tree.total_files || '--'} source files`;
+
+        const buildOk = build.build_ok !== undefined ? build.build_ok : codebase.build_ok;
+        const kpiBuildOk = document.getElementById('kpiBuildOk');
+        if (kpiBuildOk) {
+          if (buildOk === true) {
+            kpiBuildOk.textContent = "PASSING";
+            kpiBuildOk.className = "text-2xl font-bold text-emerald-400";
+          } else if (buildOk === false) {
+            kpiBuildOk.textContent = "FAILING";
+            kpiBuildOk.className = "text-2xl font-bold text-rose-400";
+          } else {
+            kpiBuildOk.textContent = "UNMEASURED";
+            kpiBuildOk.className = "text-2xl font-bold text-slate-400";
+          }
+        }
+
+        const discoverRun = build.discover_runnability !== undefined ? build.discover_runnability : codebase.discover_runnability;
+        const kpiRunnability = document.getElementById('kpiRunnability');
+        if (kpiRunnability) kpiRunnability.textContent = `Discover Runnability: ${discoverRun !== null && discoverRun !== undefined ? discoverRun + ' / 3' : 'N/A'}`;
+
+        const testsDiscovered = build.tests_discovered !== undefined ? build.tests_discovered : codebase.tests_discovered;
+        const kpiTests = document.getElementById('kpiTests');
+        if (kpiTests) kpiTests.textContent = testsDiscovered !== null && testsDiscovered !== undefined ? (testsDiscovered === true ? (tree.test_spec_files || codebase.test_spec_files || 'Passing') : testsDiscovered) : "0";
+
+        const kpiFramework = document.getElementById('kpiFramework');
+        if (kpiFramework) kpiFramework.textContent = `Runner: ${build.test_runner || 'pytest / runner'}`;
+
+        // 2. Charts
+        try { renderLanguageChart(tree.loc_by_language || tree.languages || codebase.languages || {}); } catch(e) { console.warn("Lang chart error:", e); }
+        try { renderComplexityChart(struct); } catch(e) { console.warn("Complexity chart error:", e); }
+
+        // 3. Tree & CI Subtab
+        const dtCIStatus = document.getElementById('dtCIStatus');
+        if (dtCIStatus) dtCIStatus.textContent = tree.ci_system || (tree.has_ci ? "Detected" : "None");
+        const dtCIRunTests = document.getElementById('dtCIRunTests');
+        if (dtCIRunTests) dtCIRunTests.textContent = `Runs tests: ${tree.ci_runs_tests ? 'Yes' : 'No'}`;
+        const dtPackageManager = document.getElementById('dtPackageManager');
+        if (dtPackageManager) dtPackageManager.textContent = tree.package_manager || "None detected";
+        const dtLockfile = document.getElementById('dtLockfile');
+        if (dtLockfile) dtLockfile.textContent = `Lockfile: ${tree.has_lockfile ? 'Yes' : 'No'}`;
+        const dtRuntime = document.getElementById('dtRuntime');
+        if (dtRuntime) dtRuntime.textContent = build.runtime_requested || "Auto-detected";
+        const dtRuntimeUsed = document.getElementById('dtRuntimeUsed');
+        if (dtRuntimeUsed) dtRuntimeUsed.textContent = `Used: ${build.runtime_used || 'Host system default'}`;
+
+        // 4. Git Subtab
+        const dtGitCommits = document.getElementById('dtGitCommits');
+        if (dtGitCommits) dtGitCommits.textContent = git.total_commits || codebase.total_commits || "--";
+        const dtGitActiveDays = document.getElementById('dtGitActiveDays');
+        if (dtGitActiveDays) dtGitActiveDays.textContent = git.active_days || codebase.active_days || "--";
+        const dtGitMinable = document.getElementById('dtGitMinable');
+        if (dtGitMinable) dtGitMinable.textContent = ext.git_history?.mineable_commits || codebase.capacity || "--";
+        const dtGitSpan = document.getElementById('dtGitSpan');
+        if (dtGitSpan) dtGitSpan.textContent = `${git.history_span_months || '--'} months`;
+
+        // 5. Mining Subtab
+        const miningSummary = document.getElementById('miningSummary');
+        const miningContainer = document.getElementById('miningTasksList');
+        const summaries = mining.mined_task_summaries || [];
+        const counts = mining.task_type_counts || {};
+
+        if (miningSummary) {
+          miningSummary.innerHTML = `
+            <div class="flex flex-wrap gap-2 mb-4">
+              <span class="px-2.5 py-1 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">Features: ${counts.substantial_features || 0}</span>
+              <span class="px-2.5 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Defect Repairs: ${counts.defect_repairs || 0}</span>
+              <span class="px-2.5 py-1 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">Evolutions: ${counts.repo_evolutions || 0}</span>
+              <span class="px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Hardening: ${counts.hardening_work || 0}</span>
+            </div>
+          `;
+        }
+
+        if (miningContainer) {
+          if (summaries.length > 0) {
+            miningContainer.innerHTML = summaries.map(s => `
+              <div class="bg-slate-900/80 p-3 rounded-xl border border-darkborder flex items-start space-x-3 text-xs">
+                <i class="fa-solid fa-check text-brand-400 mt-0.5"></i>
+                <span class="text-slate-300 font-mono">${escapeHtml(s)}</span>
+              </div>
+            `).join('');
+          } else {
+            miningContainer.innerHTML = `<p class="text-slate-500 text-xs py-2">No LLM task mining ran or repository has no minable candidates.</p>`;
+          }
+        }
+
+        // 6. Raw JSON
+        const rawJsonContainer = document.getElementById('rawJsonContainer');
+        if (rawJsonContainer) rawJsonContainer.textContent = JSON.stringify(measurement, null, 2);
+
+        // Scroll to results
+        if (secRes) secRes.scrollIntoView({ behavior: 'smooth' });
+      } catch (err) {
+        console.error("Error in renderResults:", err);
+      } finally {
+        resetSubmitButton();
       }
-
-      const discoverRun = build.discover_runnability !== undefined ? build.discover_runnability : codebase.discover_runnability;
-      document.getElementById('kpiRunnability').textContent = `Discover Runnability: ${discoverRun !== null && discoverRun !== undefined ? discoverRun + ' / 3' : 'N/A'}`;
-
-      const testsDiscovered = build.tests_discovered !== undefined ? build.tests_discovered : codebase.tests_discovered;
-      document.getElementById('kpiTests').textContent = testsDiscovered !== null && testsDiscovered !== undefined ? (testsDiscovered === true ? (tree.test_spec_files || codebase.test_spec_files || 'Passing') : testsDiscovered) : "0";
-      document.getElementById('kpiFramework').textContent = `Runner: ${build.test_runner || 'pytest / runner'}`;
-
-      // 2. Charts
-      renderLanguageChart(tree.loc_by_language || tree.languages || codebase.languages || {});
-      renderComplexityChart(struct);
-
-      // 3. Tree & CI Subtab
-      document.getElementById('dtCIStatus').textContent = tree.ci_system || (tree.has_ci ? "Detected" : "None");
-      document.getElementById('dtCIRunTests').textContent = `Runs tests: ${tree.ci_runs_tests ? 'Yes' : 'No'}`;
-      document.getElementById('dtPackageManager').textContent = tree.package_manager || "None detected";
-      document.getElementById('dtLockfile').textContent = `Lockfile: ${tree.has_lockfile ? 'Yes' : 'No'}`;
-      document.getElementById('dtRuntime').textContent = build.runtime_requested || "Auto-detected";
-      document.getElementById('dtRuntimeUsed').textContent = `Used: ${build.runtime_used || 'Host system default'}`;
-
-      // 4. Git Subtab
-      document.getElementById('dtGitCommits').textContent = git.total_commits || codebase.total_commits || "--";
-      document.getElementById('dtGitActiveDays').textContent = git.active_days || codebase.active_days || "--";
-      document.getElementById('dtGitMinable').textContent = ext.git_history?.mineable_commits || codebase.capacity || "--";
-      document.getElementById('dtGitSpan').textContent = `${git.history_span_months || '--'} months`;
-
-      // 5. Mining Subtab
-      const miningContainer = document.getElementById('miningTasksList');
-      const summaries = mining.mined_task_summaries || [];
-      const counts = mining.task_type_counts || {};
-
-      document.getElementById('miningSummary').innerHTML = `
-        <div class="flex flex-wrap gap-2 mb-4">
-          <span class="px-2.5 py-1 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">Features: ${counts.substantial_features || 0}</span>
-          <span class="px-2.5 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Defect Repairs: ${counts.defect_repairs || 0}</span>
-          <span class="px-2.5 py-1 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">Evolutions: ${counts.repo_evolutions || 0}</span>
-          <span class="px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Hardening: ${counts.hardening_work || 0}</span>
-        </div>
-      `;
-
-      if (summaries.length > 0) {
-        miningContainer.innerHTML = summaries.map(s => `
-          <div class="bg-slate-900/80 p-3 rounded-xl border border-darkborder flex items-start space-x-3 text-xs">
-            <i class="fa-solid fa-check text-brand-400 mt-0.5"></i>
-            <span class="text-slate-300 font-mono">${escapeHtml(s)}</span>
-          </div>
-        `).join('');
-      } else {
-        miningContainer.innerHTML = `<p class="text-slate-500 text-xs py-2">No LLM task mining ran or repository has no minable candidates (run with LLM enabled to generate candidates).</p>`;
-      }
-
-      // 6. Raw JSON
-      document.getElementById('rawJsonContainer').textContent = JSON.stringify(measurement, null, 2);
-
-      // Scroll to results
-      document.getElementById('sectionResults').scrollIntoView({ behavior: 'smooth' });
     }
 
     function renderLanguageChart(languages) {
